@@ -4,78 +4,96 @@ using UnityEngine;
 
 public class Triangle //: MonoBehaviour
 {
-    // WARNING: The order of the vertices is important because it affects the normal
-    public Vector3 m_v0;
-    public Vector3 m_v1;
-    public Vector3 m_v2;
-    
     // indices of the vertices within the mesh
     public int m_v0idx;
     public int m_v1idx;
     public int m_v2idx;
 
-    public Vector3 m_n; // normal of the triangle
+    // test
+    public int m_level;
 
     public Triangle() { }
 
     // Constructor with vertices, their indices as arguments
     // Calculate and set the normal of the trianlge and update the triangle index list and triangle list
-    public Triangle(Vector3 v0, Vector3 v1, Vector3 v2, int v0idx, int v1idx, int v2idx)
+    public Triangle(int v0idx, int v1idx, int v2idx, List<Vector3> vertexList, int level)
     {
-        m_v0 = v0;
-        m_v1 = v1;
-        m_v2 = v2;
+        m_level = level;
         m_v0idx = v0idx;
         m_v1idx = v1idx;
         m_v2idx = v2idx;
-        m_n = FindNormal();
     }
 
-    public void AddTriangleVertexIndices(ref ArrayList triangleIdxList, ref ArrayList triangleList)
+    public void AddTriangleVertexIndices(List<int> vertexIdxList, HashSet<Triangle> triangles)
     {
-        triangleIdxList.Add(m_v0idx);
-        triangleIdxList.Add(m_v1idx);
-        triangleIdxList.Add(m_v2idx);
-        triangleList.Add(this);
+        vertexIdxList.Add(m_v0idx);
+        vertexIdxList.Add(m_v1idx);
+        vertexIdxList.Add(m_v2idx);
+        triangles.Add(this);
     }
 
     // Subdivide this triangle and update the input lists, return list of sub-triangles 
-    public ArrayList Subdivide(ref ArrayList vertexLocList)
+    // Remove this current triangle and add the sub triangles instead
+    public HashSet<Triangle> Subdivide(List<Vector3> vertexList)
     {
-        Vector3 c = AdjustPointHeight(FindCentroid(), m_n);
-        int cidx = vertexLocList.Count;
-        vertexLocList.Add(c);
+        Vector3 v0 = vertexList[m_v0idx];
+        Vector3 v1 = vertexList[m_v1idx];
+        Vector3 v2 = vertexList[m_v2idx];
+        Vector3 n = FindNormal(vertexList[m_v0idx], vertexList[m_v1idx], vertexList[m_v2idx]);
+
+        // Find midpoint of three edges and adjust their height along the normal with of the current triangle
+        Vector3 m0 = AdjustPointHeight(FindMidpoint(v1, v2), n);
+        Vector3 m1 = AdjustPointHeight(FindMidpoint(v2, v0), n);
+        Vector3 m2 = AdjustPointHeight(FindMidpoint(v0, v1), n);
+
+        // Generate indices for these vertices in triangleList and add them to the list
+        int m0idx = vertexList.Count;
+        int m1idx = m0idx + 1;
+        int m2idx = m0idx + 2;
+        vertexList.Add(m0);
+        vertexList.Add(m1);
+        vertexList.Add(m2);
 
         // Create sub triangles and add to the list
-        Triangle t_v0v1c = new Triangle(m_v0, m_v1, c, m_v0idx, m_v1idx, cidx);
-        Triangle t_cv1v2 = new Triangle(c, m_v1, m_v2, cidx, m_v1idx, m_v2idx);
-        Triangle t_v0cv2 = new Triangle(m_v0, c, m_v2, m_v0idx, cidx, m_v2idx);
+        Triangle t0 = new Triangle(m_v0idx, m2idx, m1idx, vertexList, m_level + 1);
+        Triangle t1 = new Triangle(m_v1idx, m0idx, m2idx, vertexList, m_level + 1);
+        Triangle t2 = new Triangle(m_v2idx, m1idx, m0idx, vertexList, m_level + 1);
+        Triangle t3 = new Triangle(m0idx, m1idx, m2idx, vertexList, m_level + 1);
 
-        ArrayList subTriangleList = new ArrayList();
-        subTriangleList.Add(t_v0v1c);
-        subTriangleList.Add(t_cv1v2);
-        subTriangleList.Add(t_v0cv2);
+        HashSet<Triangle> subTriangles = new HashSet<Triangle>();
+        subTriangles.Add(t0);
+        subTriangles.Add(t1);
+        subTriangles.Add(t2);
+        subTriangles.Add(t3);
 
-        return subTriangleList;
+        return subTriangles;
     }
 
-    Vector3 FindCentroid()
+    Vector3 FindCentroid(List<Vector3> vertexList)
     {
-        return 1f / 3f * (m_v0 + m_v1 + m_v2);
+        Vector3 v0 = vertexList[m_v0idx];
+        Vector3 v1 = vertexList[m_v1idx];
+        Vector3 v2 = vertexList[m_v2idx];
+        return 1f / 3f * (v0 + v1 + v2);
     }
 
-    Vector3 FindNormal()
+    Vector3 FindNormal(Vector3 v0, Vector3 v1, Vector3 v2)
     {
-        Vector3 v01 = m_v1 - m_v0;
-        Vector3 v02 = m_v2 - m_v0;
+        Vector3 v01 = v1 - v0;
+        Vector3 v02 = v2 - v0;
         return Vector3.Normalize(Vector3.Cross(v01, v02));
     }
 
     // Add some random values to the current height of this point along some direction
-    static Vector3 AdjustPointHeight(Vector3 p, Vector3 d)
+    Vector3 AdjustPointHeight(Vector3 p, Vector3 d)
     {
         // Test to get random height
-        float rand = Random.Range(0f, 0.5f);
+        float rand = 1f / (m_level + 1f) * Random.Range(0f, 1f);
         return p + rand * d;
+    }
+
+    Vector3 FindMidpoint(Vector3 v0, Vector3 v1)
+    {
+        return 0.5f * (v0 + v1);
     }
 }
