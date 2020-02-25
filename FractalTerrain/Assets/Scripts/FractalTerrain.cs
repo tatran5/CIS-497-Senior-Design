@@ -26,10 +26,9 @@ public class FractalTerrain : MonoBehaviour
         }
     }
 
-
-
     void CreateMeshTest()
-    {   mesh.Clear();
+    {   
+        mesh.Clear();
         mesh.vertices = new Vector3[]
         {
             new Vector3(0, 0, 1),
@@ -45,6 +44,8 @@ public class FractalTerrain : MonoBehaviour
     {
     }
 
+
+
     void CreateMeshSquares()
     {
         HashSet<Square> squares; // test squares
@@ -53,8 +54,9 @@ public class FractalTerrain : MonoBehaviour
         // Find the resolution (= 2 ^ mResFactor + 1) and create a grid of resolution * resolution)
         // Which is (resolution - 1) * (resolution - 1) number of squares, hence 6 * (resolution - 1) * (resolution - 1) triangles
         int resolution = (int) Mathf.Pow(2, mResolutionFactor) + 1;
+        Square.ms_res = resolution;
 
-        int size = resolution * resolution;
+int size = resolution * resolution;
         int numIndices = 6 * (resolution - 1) * (resolution - 1);
         vertices = new Vector3[size];
         triangles = new int[numIndices];
@@ -64,13 +66,13 @@ public class FractalTerrain : MonoBehaviour
         int topRightIdx = resolution - 1;
         int botRightIdx = size - 1;
         int botLeftIdx = resolution * (resolution - 1);
-        vertices[topLeftIdx] = new Vector3(0, 0, 1); // top left
+        vertices[topLeftIdx] = new Vector3(0, 0, 1); // top left`
         vertices[topRightIdx] = new Vector3(1, 0, 1); // top right
         vertices[botRightIdx] = new Vector3(1, 0, 0); // bot right
         vertices[botLeftIdx] = new Vector3(0, 0, 0); // bot left
 
         Square sMain = new Square(topLeftIdx, topRightIdx, botRightIdx, botLeftIdx, 0, squares);
-        sMain.Subdivide(vertices, squares);
+        sMain.Subdivide(vertices, squares, Algorithm.MidpointDisplacement);
 
         int startLoc = 0;
         foreach (Square s in squares) s.AddIndices(ref startLoc, triangles);

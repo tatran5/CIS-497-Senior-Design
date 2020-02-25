@@ -2,9 +2,16 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+// Reference: http://micsymposium.org/mics_2011_proceedings/mics2011_submission_30.pdf
+public enum Algorithm
+{
+    MidpointDisplacement, // Fastest but has line artifacts
+    DiamondSquare // Slower but has better quality
+}
 public class Square //: MonoBehaviour
 {
-    public static float m_heightRange = 0.5f;
+    public static float ms_heightRange = 0.5f;
+    public static int ms_sideRes; // The side resolution of all squares combined
 
     int m_level;
     // Indices of the four vertices that make up this square
@@ -26,15 +33,63 @@ public class Square //: MonoBehaviour
         if (squares != null) squares.Add(this);
     }
 
-    public void Subdivide(Vector3[] vertices, HashSet<Square> squares)
+    public void Subdivide(Vector3[] vertices, HashSet<Square> squares, Algorithm algorithm)
+    {
+        switch (algorithm)
+        {
+            case Algorithm.MidpointDisplacement:
+                SubdivideMidpointDisplacement(vertices, squares);
+                break;
+            case Algorithm.DiamondSquare:
+                SubdivideDiamondSquare(vertices, squares);
+                break;
+        }
+    }
+
+    // Reference: https://stevelosh.com/blog/2016/06/diamond-square/
+    public void SubdivideDiamondSquare(Vector3[] vertices, HashSet<Square> squares)
+    {
+        if (m_topRightIdx - m_topLeftIdx > 1)
+        {
+            Vector3 n = GetNormal(vertices[m_topLeftIdx], vertices[m_topRightIdx], vertices[m_botLeftIdx]);
+
+            // 1. Intialize corners to random value
+            AdjustHeightFourPoints(ref vertices[m_topLeftIdx], ref vertices[m_topRightIdx],
+                ref vertices[m_botLeftIdx], ref vertices[m_botRightIdx], n);
+
+            // 2. Set the center of the heightmap to the average of the corners (plus jitter)
+            int centerIdx = AdjustHeightCenter(vertices, n);
+
+            // 3. Set the midpoints of the edges as the average of the four points on the "diamond" around them
+            int midTopIdx = (m_topLeftIdx + m_topRightIdx) / 2;
+            int midRightIdx = (m_topRightIdx + m_botRightIdx) / 2;
+            int midBotIdx = (m_botRightIdx + m_botLeftIdx) / 2;
+            int midLeftIdx = (m_botLeftIdx + m_topLeftIdx) / 2;
+        }
+    }
+
+    // Used for diamond square algorithm
+    public void AdjustMidpoint(int midIdx, Vector3[] vertices)
+    {
+        // Find the four "diamond" points around this current point
+        int sideRes = m_topRightIdx - m_topLeftIdx;
+        int topIdx = midIdx - sideRes * ms_sideRes;
+        int rightIdx = midIdx + sideRes;
+        int botIdx = midIdx + sideRes * ms_sideRes;
+        int leftIdx = midIdx - sideRes;
+        if (topIdx < 0) vertices[midIdx] = 
+    }
+
+    // Reference: https://stevelosh.com/blog/2016/02/midpoint-displacement/#s2-resources-code-and-examples
+    public void SubdivideMidpointDisplacement(Vector3[] vertices, HashSet<Square> squares)
     {
         if (m_topRightIdx - m_topLeftIdx > 1)
         {
             Vector3 n = GetNormal(vertices[m_topLeftIdx], vertices[m_topRightIdx], vertices[m_botLeftIdx]);
 
             // 1. Set the four corners of the square to random values along the normal
-            //AdjustHeightFourPoints(ref vertices[m_topLeftIdx], ref vertices[m_topRightIdx],
-            //    ref vertices[m_botLeftIdx], ref vertices[m_botRightIdx], n);
+            AdjustHeightFourPoints(ref vertices[m_topLeftIdx], ref vertices[m_topRightIdx],
+                ref vertices[m_botLeftIdx], ref vertices[m_botRightIdx], n);
 
             // 2. Find midpoints, set to random values along the normal
             int midTopIdx = (m_topLeftIdx + m_topRightIdx) / 2;
@@ -47,9 +102,7 @@ public class Square //: MonoBehaviour
                 ref vertices[midBotIdx], ref vertices[midLeftIdx], n);
 
             // 3. Get the center by averaging 4 points and add a random displacement
-            int centerIdx = (m_topLeftIdx + m_topRightIdx + m_botRightIdx + m_botLeftIdx) / 4;
-            vertices[centerIdx] = Average4(vertices[m_topLeftIdx], vertices[m_topRightIdx], vertices[m_botRightIdx], vertices[m_botLeftIdx]);
-            vertices[centerIdx] = GetAdjustedHeight(vertices[centerIdx], n);
+            int centerIdx = AdjustHeightCenter(vertices, n);
 
             // 4. Create four squares
             squares.Remove(this);
@@ -59,83 +112,28 @@ public class Square //: MonoBehaviour
             Square sBotLeft = new Square(midLeftIdx, centerIdx, midBotIdx, m_botLeftIdx, m_level + 1, squares);
 
             // 5. Call subdivision on them
-            sTopLeft.Subdivide(vertices, squares);
-            sTopRight.Subdivide(vertices, squares);
-            sBotRight.Subdivide(vertices, squares);
-            sBotLeft.Subdivide(vertices, squares);
+            sTopLeft.SubdivideMidpointDisplacement(vertices, squares);
+            sTopRight.SubdivideMidpointDisplacement(vertices, squares);
+            sBotRight.SubdivideMidpointDisplacement(vertices, squares);
+            sBotLeft.SubdivideMidpointDisplacement(vertices, squares);
         }
     }
 
-    // !!! Not working
-    public HashSet<Square> SubdivideMultiple(List<Vector3> vertices, HashSet<Square> squares, int subdivisionLevel)
+    // Return index of the center and also get the center value and put it into the vertices array
+    public int GetCenter(Vector3[] vertices)
     {
-        HashSet<Square> subSquares = new HashSet<Square>();
-        if (subdivisionLevel > 0)
-        {
-            subSquares = Subdivide(vertices, squares);
-            foreach (Square subSquare in subSquares) subSquare.SubdivideMultiple(vertices, squares, subdivisionLevel - 1);
-        }
-        return subSquares;
+        int centerIdx = (m_topLeftIdx + m_topRightIdx + m_botRightIdx + m_botLeftIdx) / 4;
+        vertices[centerIdx] = Average4(vertices[m_topLeftIdx], vertices[m_topRightIdx], vertices[m_botRightIdx], vertices[m_botLeftIdx]);
+        return centerIdx;
     }
-
-
-    // Input: indicies of the two vertices making this edge and the centers of 2 squares adjacent to this edge
-    // If the edge is on the boundary (there is no adjacent square on one side of the edge), the midpoint is the 
-    // average of the two indicies
-    // Want to get the midpoint between p0 and p1, but using the average of p0, p1, c0, c1
-    Vector3 GetMidpointOfEdge(int p0Idx, int p1Idx, int c0Idx, int c1Idx, List<Vector3> vertices)
+    
+    // Return the index of the center and modify the center value
+    public int AdjustHeightCenter(Vector3[] vertices, Vector3 normal)
     {
-        if (c0Idx == -1 || c1Idx == -1) return Average2(vertices[p0Idx], vertices[p1Idx]);
-        return Average4(vertices[p0Idx], vertices[p1Idx], vertices[c0Idx], vertices[c1Idx]);
+        int centerIdx = GetCenter(vertices);
+        vertices[centerIdx] = GetAdjustedHeight(vertices[centerIdx], normal);
+        return centerIdx;
     }
-
-    // !!! Not working
-    public HashSet<Square> Subdivide(List<Vector3> vertices, HashSet<Square> squares)
-    {
-        // Get the four corners first & adjust their height
-        Vector3 topLeft = vertices[m_topLeftIdx];
-        Vector3 topRight = vertices[m_topRightIdx];
-        Vector3 botRight = vertices[m_botRightIdx];
-        Vector3 botLeft = vertices[m_botLeftIdx];
-        Vector3 n = GetNormal(topLeft, topRight, botRight);
-        AdjustHeightFourPoints(ref topLeft, ref topRight, ref botRight, ref botLeft, n);
-
-        // Midpoints for the 4 edges and center of the square
-        Vector3 midTop = new Vector3(), midRight = new Vector3(), midBot = new Vector3(), midLeft = new Vector3();
-        GetMidpoints(topLeft, topRight, botRight, botLeft, ref midTop, ref midRight, ref midBot, ref midLeft);
-        AdjustHeightFourPoints(ref midTop, ref midLeft, ref midBot, ref midRight, n);
-
-        // Get the center and modify it
-        Vector3 center = GetAdjustedHeight(Average4(midTop, midLeft, midBot, midRight), n);
-
-        // Add the new vertices to the input lists
-        int midTopIdx = vertices.Count;
-        int midLeftIdx = midTopIdx + 1;
-        int midBotIdx = midTopIdx + 2;
-        int midRightIdx = midTopIdx + 3;
-        int centerIdx = midTopIdx + 4;
-        vertices.Add(midTop);
-        vertices.Add(midLeft);
-        vertices.Add(midBot);
-        vertices.Add(midRight);
-        vertices.Add(center);
-
-        // Delete this square from the set and add its four smaller squares
-        squares.Remove(this);
-        Square topLeftSquare = new Square(m_topLeftIdx, midTopIdx, centerIdx, midLeftIdx, m_level + 1, squares);
-        Square topRightSquare = new Square(midTopIdx, m_topRightIdx, midRightIdx, centerIdx, m_level + 1, squares);
-        Square botRightSquare = new Square(centerIdx, midRightIdx, m_botRightIdx, midBotIdx, m_level + 1, squares);
-        Square botLeftSquare = new Square(midLeftIdx, centerIdx, midBotIdx, m_botLeftIdx, m_level + 1, squares);
-
-        // Return these squares
-        HashSet<Square> subSquares = new HashSet<Square>();
-        subSquares.Add(topLeftSquare);
-        subSquares.Add(topRightSquare);
-        subSquares.Add(botRightSquare);
-        subSquares.Add(botLeftSquare);
-        return subSquares;
-    }
-
     public void AddIndices(ref int startLoc, int[] vertexIndices)
     {
         vertexIndices[startLoc] = m_topLeftIdx;
@@ -171,8 +169,8 @@ public class Square //: MonoBehaviour
     // Randomly adjust an input point (p) along a vector (n) based on heightRange and level
     Vector3 GetAdjustedHeight(Vector3 p, Vector3 n)
     {
-        float denominator = 7 * (m_level + 1f);
-        float scale = Random.Range(-m_heightRange / denominator, m_heightRange / denominator);
+        float denominator = (m_level + 1f) * (m_level + 1f);
+        float scale = Random.Range(-ms_heightRange / denominator, ms_heightRange / denominator);
         return scale * n + p;
     }
 
@@ -186,12 +184,17 @@ public class Square //: MonoBehaviour
 
     Vector3 Average2(Vector3 p0, Vector3 p1)
     {
-        return 0.5f * (p0 + p1);
+        return (p0 + p1) / 2f;
+    }
+
+    Vector3 Average3(Vector3 p0, Vector3 p1, Vector3 p2)
+    {
+        return (p0 + p1 + p2) / 3f;
     }
 
     Vector3 Average4(Vector3 p0, Vector3 p1, Vector3 p2, Vector3 p3)
     {
-        return 0.25f * (p0 + p1 + p2 + p3);
+        return (p0 + p1 + p2 + p3) / 4f;
     }
 
     Vector3 GetNormal(Vector3 v0, Vector3 v1, Vector3 v2)
