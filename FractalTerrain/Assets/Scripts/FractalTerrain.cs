@@ -12,6 +12,7 @@ public class FractalTerrain : MonoBehaviour
     Mesh mesh;
     Vector3[] vertices;
     int[] triangles;
+    Vector3 m_worldUp;
 
 
     // HashSet<Triangle> triangles; // test triangles
@@ -22,7 +23,7 @@ public class FractalTerrain : MonoBehaviour
         mesh = new Mesh();
         GetComponent<MeshFilter>().mesh = mesh;
         //CreateMeshTest();
-
+        m_worldUp = new Vector3(0, 1, 0);
         if (m_resolutionFactor < 0)
         {
             Debug.Log("m_resolutionFactor needs to be at least 0. Default one square instead");
@@ -62,6 +63,7 @@ public class FractalTerrain : MonoBehaviour
     // http://jmecom.github.io/blog/2015/diamond-square/
     void DiamondSquare()
     {
+        // Debug.Log("m_res: " + m_res);
         int squareSize = m_res - 1; // Should always be an exponent of 2
         int reduction = 1;
 
@@ -75,13 +77,12 @@ public class FractalTerrain : MonoBehaviour
         vertices[topRigIdx] = new Vector3(1, 0, 1);
         vertices[botRigIdx] = new Vector3(1, 0, 0);
         vertices[botLefIdx] = new Vector3(0, 0, 0);
+        Vector3 normalOriginal = Global.GetNormal(vertices[topLefIdx], vertices[topRigIdx], vertices[botRigIdx]);
 
-        Vector3 normalOrginal = Global.GetNormal(vertices[topLefIdx], vertices[topRigIdx], vertices[botRigIdx]);
-
-        //vertices[topLefIdx] = Global.GetJittered(vertices[topLefIdx], normalOrginal, m_heightRange, reduction);
-        //vertices[topRigIdx] = Global.GetJittered(vertices[topRigIdx], normalOrginal, m_heightRange, reduction);
-        //vertices[botRigIdx] = Global.GetJittered(vertices[botRigIdx], normalOrginal, m_heightRange, reduction);
-        //vertices[botLefIdx] = Global.GetJittered(vertices[botLefIdx], normalOrginal, m_heightRange, reduction);
+        vertices[topLefIdx] = Global.GetJittered(vertices[topLefIdx], m_worldUp, m_heightRange, reduction);
+        vertices[topRigIdx] = Global.GetJittered(vertices[topRigIdx], m_worldUp, m_heightRange, reduction);
+        vertices[botRigIdx] = Global.GetJittered(vertices[botRigIdx], m_worldUp, m_heightRange, reduction);
+        vertices[botLefIdx] = Global.GetJittered(vertices[botLefIdx], m_worldUp, m_heightRange, reduction);
 
         // square steps
         while (squareSize > 1)
@@ -90,14 +91,19 @@ public class FractalTerrain : MonoBehaviour
             {
                 for (int x = 0; x < m_res - 1; x += squareSize)
                 {
-                    SquareStep(x, z, squareSize, reduction);
+                    // Debug.Log("z: " + z + "; x: " + x);
+                    SquareStep(z, x, squareSize, reduction);
                 }
             }
 
             int halfSquareSize = squareSize / 2;
-            for (int i = halfSquareSize; i < m_res * m_res - 1; i += squareSize)
+            for (int z = 0; z < m_res; z += halfSquareSize)
             {
-                    DiamondStep(i, squareSize, reduction);
+                int startX = (z / halfSquareSize) % 2 == 0 ? halfSquareSize : 0;
+                for (int x = startX; x < m_res; x += squareSize)
+                {
+                    DiamondStep(z, x, squareSize, reduction);
+                }
             }
 
             squareSize /= 2;
@@ -120,6 +126,7 @@ public class FractalTerrain : MonoBehaviour
                 int topRig = topLef + 1;
                 int botLef = (z + 1) * m_res + x;
                 int botRig = botLef + 1;
+                // Debug.Log("topLef: " + topLef + "; topRig: " + topRig + "; botRig: " + botRig + "; botLef: " + botLef);
                 triangles[count++] = topLef;
                 triangles[count++] = topRig;
                 triangles[count++] = botRig;
@@ -132,25 +139,30 @@ public class FractalTerrain : MonoBehaviour
 
     // (x, z) is the coordinate of the top lef corner of tthe square
     // Find the center,set its height as the average of the four corners plus some random value
-    void SquareStep(int x, int z, int sideLength, float reduction)
+    void SquareStep(int z, int x, int sideLength, float reduction)
     {
-        int topLefIdx = z * sideLength + x;
+        int topLefIdx = z * m_res + x;
         int topRigIdx = topLefIdx + sideLength;
         int botRigIdx = topRigIdx + sideLength * m_res;
         int botLefIdx = botRigIdx - sideLength;
+        //Debug.Log("topLefIdx: " + topLefIdx + "; ");
+        //Debug.Log("topRigIdx: " + topRigIdx + "; ");
+        //Debug.Log("botRigIdx: " + botRigIdx + "; ");
+        //Debug.Log("botLefIdx: " + botLefIdx + "; ");
 
         Vector3 normal = Global.GetNormal(vertices[topLefIdx], vertices[topRigIdx], vertices[botRigIdx]);
         int centerIdx = Global.Average4Int(topLefIdx, topRigIdx, botRigIdx, botLefIdx);
         vertices[centerIdx] = Global.Average4Vector(vertices[topLefIdx], vertices[topRigIdx],
             vertices[botRigIdx], vertices[botLefIdx]);
-        Debug.Log("centerIdx: " + centerIdx + "; " + vertices[centerIdx]);
-        // vertices[centerIdx] = Global.GetJittered(vertices[centerIdx], normal, m_heightRange, reduction);
+        // Debug.Log("centerIdx: " + centerIdx + "; " + vertices[centerIdx]);
+        vertices[centerIdx] = Global.GetJittered(vertices[centerIdx], m_worldUp, m_heightRange, reduction);
     }
 
     // (x, z) is the coordinate ofsome point that needs to be averaged by the four "diamond points" around it
     // Find it, set its height by the average plus some random value
-    void DiamondStep(int currentIdx, int sideLength, float reduction)
+    void DiamondStep(int z, int x, int sideLength, float reduction)
     {
+        int currentIdx = z * m_res + x;
         int halfSideLength = sideLength / 2;
 
         int topIdx = currentIdx - halfSideLength * m_res;
@@ -163,59 +175,46 @@ public class FractalTerrain : MonoBehaviour
         //int onBotBorder = botIdx / m_res - (m_res - 1);
         //int onLefBorder = lefIdx % m_res;
         //int onRigBorder = rigIdx % m_res - (m_res - 1);
+        //Debug.Log("topIdx: " + topIdx + "; ");
+        //Debug.Log("rigIdx: " + rigIdx + "; ");
+        //Debug.Log("botIdx: " + botIdx + "; ");
 
+        //Debug.Log("lefIdx: " + lefIdx + "; ");
         // Check for edge cases where the current point is on the edge of the original sqaure
         if (topIdx < 0)
         {
-            Debug.Log("topIdx: " + topIdx + "; ");
-            Debug.Log("botIdx: " + botIdx + "; " + vertices[botIdx]);
-            Debug.Log("rigIdx: " + rigIdx + "; " + vertices[rigIdx]);
-            Debug.Log("lefIdx: " + lefIdx + "; " + vertices[lefIdx]);
             normal = Global.GetNormal(vertices[rigIdx], vertices[botIdx], vertices[lefIdx]);
-            vertices[currentIdx] = new Vector3((vertices[lefIdx].x + vertices[rigIdx].x) / 2f, 0, (vertices[lefIdx].z + vertices[rigIdx].z) / 2f); // Global.Average3Vector(vertices[rigIdx], vertices[botIdx], vertices[lefIdx]);
+            vertices[currentIdx] = new Vector3((vertices[lefIdx].x + vertices[rigIdx].x) / 2f, 0, (vertices[lefIdx].z + vertices[rigIdx].z) / 2f); //
+            // vertices[currentIdx] = Global.Average3Vector(vertices[rigIdx], vertices[botIdx], vertices[lefIdx]);
         }
         else if (botIdx > m_res * m_res - 1)
         {
-            Debug.Log("topIdx: " + topIdx + "; " + vertices[topIdx]);
-            Debug.Log("botIdx: " + botIdx + "; " );
-            Debug.Log("rigIdx: " + rigIdx + "; " + vertices[rigIdx]);
-            Debug.Log("lefIdx: " + lefIdx + "; " + vertices[lefIdx]);
             normal = Global.GetNormal(vertices[topIdx], vertices[rigIdx], vertices[lefIdx]);
             vertices[currentIdx] = new Vector3((vertices[lefIdx].x + vertices[rigIdx].x) / 2f, 0, (vertices[lefIdx].z + vertices[rigIdx].z) / 2f); ;// Global.Average3Vector(vertices[topIdx], vertices[rigIdx], vertices[lefIdx]);
         }
         else if (rigIdx % m_res == m_res - 1)
         {
-            Debug.Log("topIdx: " + topIdx + "; " + vertices[topIdx]);
-            Debug.Log("botIdx: " + botIdx + "; " + vertices[botIdx]);
-            Debug.Log("rigIdx: " + rigIdx + "; ");
-            Debug.Log("lefIdx: " + lefIdx + "; " + vertices[lefIdx]);
+            //Debug.Log("topIdx: " + topIdx + "; " + vertices[topIdx]);
+            //Debug.Log("botIdx: " + botIdx + "; " + vertices[botIdx]);
+            //Debug.Log("rigIdx: " + rigIdx + "; ");
+            //Debug.Log("lefIdx: " + lefIdx + "; " + vertices[lefIdx]);
             normal = Global.GetNormal(vertices[botIdx], vertices[lefIdx], vertices[topIdx]);
             vertices[currentIdx] = new Vector3((vertices[topIdx].x + vertices[botIdx].x) / 2f, 0, (vertices[topIdx].z + vertices[botIdx].z) / 2f); // Global.Average3Vector(vertices[botIdx], vertices[lefIdx], vertices[topIdx]);
         }
         else if (lefIdx % m_res == 0)
         {
-            Debug.Log("topIdx: " + topIdx + "; " + vertices[topIdx]);
-            Debug.Log("botIdx: " + botIdx + "; " + vertices[botIdx]);
-            Debug.Log("rigIdx: " + rigIdx + "; " + vertices[rigIdx]);
-            Debug.Log("lefIdx: " + lefIdx + "; ");
             normal = Global.GetNormal(vertices[topIdx], vertices[rigIdx], vertices[botIdx]);
             vertices[currentIdx] = new Vector3((vertices[topIdx].x + vertices[botIdx].x) / 2f, 0, (vertices[topIdx].z + vertices[botIdx].z) / 2f);//  Global.Average3Vector(vertices[topIdx], vertices[rigIdx], vertices[botIdx]);
         }
         else
         {
-            Debug.Log("topIdx: " + topIdx + "; " + vertices[topIdx]);
-            Debug.Log("botIdx: " + botIdx + "; " + vertices[botIdx]);
-            Debug.Log("rigIdx: " + rigIdx + "; " + vertices[rigIdx]);
-            Debug.Log("lefIdx: " + lefIdx + "; " + vertices[lefIdx]);
             normal = Global.GetNormal(vertices[topIdx], vertices[rigIdx], vertices[botIdx]);
-           // normal = Global.GetNormal(vertices[topIdx], vertices[rigIdx], vertices[botIdx]);
             vertices[currentIdx] = new Vector3((vertices[topIdx].x + vertices[botIdx].x) / 2f, 0, (vertices[topIdx].z + vertices[botIdx].z) / 2f);//Global.Average4Vector(vertices[topIdx], vertices[rigIdx],
                                                                                                                                                   // vertices[botIdx], vertices[lefIdx]);
         }
 
-        Debug.Log("currentIdx: " + currentIdx + "; " + vertices[currentIdx]);
-
-        //vertices[currentIdx] = Global.GetJittered(vertices[currentIdx], normal, m_heightRange, reduction);
+        // Debug.Log("currentIdx: " + currentIdx + "; " + vertices[currentIdx]);
+        vertices[currentIdx] = Global.GetJittered(vertices[currentIdx], m_worldUp, m_heightRange, reduction);
     }
 
 

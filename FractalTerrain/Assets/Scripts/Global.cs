@@ -7,7 +7,7 @@ public class Global
     
     public static Vector3 GetJittered(Vector3 point, Vector3 direction, float heightRange, float reduction)
     {
-        return point + Random.Range(-heightRange, heightRange) / reduction * direction;
+        return point + Random.Range(0, heightRange) / reduction * direction;
     }
 
     public static Vector3 GetNormal(Vector3 v0, Vector3 v1, Vector3 v2)
