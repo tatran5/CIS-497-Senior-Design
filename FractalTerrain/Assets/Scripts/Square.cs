@@ -1,5 +1,4 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 // Reference: http://micsymposium.org/mics_2011_proceedings/mics2011_submission_30.pdf
@@ -60,16 +59,36 @@ public class Square //: MonoBehaviour
             // 2. Set the center of the heightmap to the average of the corners (plus jitter)
             int centerIdx = AdjustHeightCenter(vertices, n);
 
-            // 3. Set the midpoints of the edges as the average of the four points on the "diamond" around them
+            // 3. Set the midpoints of the edges as the average of the four points on the 
+            // "diamond" around them (plus jitter)
             int midTopIdx = (m_topLeftIdx + m_topRightIdx) / 2;
             int midRightIdx = (m_topRightIdx + m_botRightIdx) / 2;
             int midBotIdx = (m_botRightIdx + m_botLeftIdx) / 2;
             int midLeftIdx = (m_botLeftIdx + m_topLeftIdx) / 2;
+            AdjustMidpointsDiamondSquare(midTopIdx, midRightIdx, midBotIdx, midLeftIdx, vertices, n);
+
+            // 4. Create 4 squares and recursively call this on those four squares
+            squares.Remove(this);
+            Square sTopLeft = new Square(m_topLeftIdx, midTopIdx, centerIdx, midLeftIdx, m_level + 1, squares);
+            Square sTopRight = new Square(midTopIdx, m_topRightIdx, midRightIdx, centerIdx, m_level + 1, squares);
+            Square sBotRight = new Square(m_topLeftIdx, midTopIdx, centerIdx, midLeftIdx, m_level + 1, squares);
+            Square sBotLeft = new Square(midLeftIdx, centerIdx, midBotIdx, m_botLeftIdx, m_level + 1, squares);
+
+            
         }
     }
 
-    // Used for diamond square algorithm
-    public void AdjustMidpoint(int midIdx, Vector3[] vertices)
+    public void AdjustMidpointsDiamondSquare(int midTopIdx, int midRightIdx, int midBotIdx, int midLeftIdx,
+        Vector3[] vertices, Vector3 normal)
+    {
+        AdjustMidpointDiamondSquare(midTopIdx, vertices, normal);
+        AdjustMidpointDiamondSquare(midRightIdx, vertices, normal);
+        AdjustMidpointDiamondSquare(midBotIdx, vertices, normal);
+        AdjustMidpointDiamondSquare(midLeftIdx, vertices, normal);
+    }
+
+    // Adjust one midpoint and handle the boundary case;
+    public void AdjustMidpointDiamondSquare(int midIdx, Vector3[] vertices, Vector3 normal)
     {
         // Find the four "diamond" points around this current point
         int sideRes = m_topRightIdx - m_topLeftIdx;
@@ -77,7 +96,19 @@ public class Square //: MonoBehaviour
         int rightIdx = midIdx + sideRes;
         int botIdx = midIdx + sideRes * ms_sideRes;
         int leftIdx = midIdx - sideRes;
-        if (topIdx < 0) vertices[midIdx] = 
+
+        // Handle cases of which there's a missing point (aka the midpoint is on the border
+        // at the top, bottom, right, left
+        if (topIdx < 0)
+            vertices[midIdx] = Average3(vertices[rightIdx], vertices[botIdx], vertices[leftIdx]);
+        else if (Mathf.Ceil(botIdx / ms_sideRes) == ms_sideRes)
+            vertices[midIdx] = Average3(vertices[topIdx], vertices[rightIdx], vertices[leftIdx]);
+        else if (leftIdx % ms_sideRes == 0)
+            vertices[midIdx] = Average3(vertices[topIdx], vertices[rightIdx], vertices[botIdx]);
+        else if (rightIdx % ms_sideRes == ms_sideRes - 1)
+            vertices[midIdx] = Average3(vertices[topIdx], vertices[botIdx], vertices[leftIdx]);
+
+        vertices[midIdx] = GetAdjustedHeight(vertices[midIdx], normal);
     }
 
     // Reference: https://stevelosh.com/blog/2016/02/midpoint-displacement/#s2-resources-code-and-examples
@@ -126,7 +157,7 @@ public class Square //: MonoBehaviour
         vertices[centerIdx] = Average4(vertices[m_topLeftIdx], vertices[m_topRightIdx], vertices[m_botRightIdx], vertices[m_botLeftIdx]);
         return centerIdx;
     }
-    
+
     // Return the index of the center and modify the center value
     public int AdjustHeightCenter(Vector3[] vertices, Vector3 normal)
     {
@@ -157,13 +188,13 @@ public class Square //: MonoBehaviour
         vertexIndices.Add(m_botLeftIdx);
     }
 
-    void GetMidpoints(Vector3 topLeft, Vector3 topRight, Vector3 botRight, Vector3 botLeft, 
+    void GetMidpoints(Vector3 topLeft, Vector3 topRight, Vector3 botRight, Vector3 botLeft,
         ref Vector3 midTop, ref Vector3 midRight, ref Vector3 midBot, ref Vector3 midLeft)
     {
-       midTop = Average2(topLeft, topRight);
-       midLeft = Average2(topLeft, botLeft);
-       midBot = Average2(botRight, botLeft);
-       midRight = Average2(botRight, topRight);
+        midTop = Average2(topLeft, topRight);
+        midLeft = Average2(topLeft, botLeft);
+        midBot = Average2(botRight, botLeft);
+        midRight = Average2(botRight, topRight);
     }
 
     // Randomly adjust an input point (p) along a vector (n) based on heightRange and level

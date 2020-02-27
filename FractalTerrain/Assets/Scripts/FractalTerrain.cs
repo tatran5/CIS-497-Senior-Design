@@ -6,36 +6,49 @@ using UnityEngine;
 public class FractalTerrain : MonoBehaviour
 {
     // From this resolution factor, we can generate a grid off size (3 + 2^r) x (3 + 2^r)
-    public int mResolutionFactor = 1; // need to be at least 1
+    public int m_resolutionFactor = 0; // need to be at least 1
+    public float m_heightRange = 0.5f;
+    int m_res;
     Mesh mesh;
     Vector3[] vertices;
     int[] triangles;
 
-   // HashSet<Triangle> triangles; // test triangles
+
+    // HashSet<Triangle> triangles; // test triangles
 
     // Start is called before the first frame update
     void Start()
     {
-        if (mResolutionFactor <= 0) Debug.Log("mResolutionFactor needs to be at least 1");
-        else
+        mesh = new Mesh();
+        GetComponent<MeshFilter>().mesh = mesh;
+        //CreateMeshTest();
+
+        if (m_resolutionFactor < 0)
         {
-            mesh = new Mesh();
-            GetComponent<MeshFilter>().mesh = mesh;
-            CreateMeshSquares();
-            UpdateMesh();
+            Debug.Log("m_resolutionFactor needs to be at least 0. Default one square instead");
+            m_res = 0;
         }
+        
+        // Find the resolution (= 2 ^ m_resFactor + 1) and create a grid of resolution * resolution)
+        // Which is (resolution - 1) * (resolution - 1) number of squares, hence 6 * (resolution - 1) * (resolution - 1) triangles
+        m_res = (int)Mathf.Pow(2, m_resolutionFactor) + 1;
+        vertices = new Vector3[m_res * m_res];
+
+        DiamondSquare();
+        UpdateMesh();
     }
 
     void CreateMeshTest()
-    {   
+    {
         mesh.Clear();
         mesh.vertices = new Vector3[]
         {
-            new Vector3(0, 0, 1),
-            new Vector3(1, 0, 1),
-            new Vector3(1, 0, 0)
-        };
-        mesh.triangles = new int[] { 0, 1, 2 };
+            new Vector3(0, 0, 1), // top lef
+            new Vector3(1, 0, 1), // top rig
+            new Vector3(1, 0, 0), // bot rig
+            new Vector3(0, 0, 0) // bot lef
+    };
+        mesh.triangles = new int[] { 0, 1, 2, 0, 2, 3 };
         mesh.RecalculateNormals();
     }
 
@@ -44,83 +57,165 @@ public class FractalTerrain : MonoBehaviour
     {
     }
 
-
-
-    void CreateMeshSquares()
+    // Reference: 
+    // https://medium.com/@nickobrien/diamond-square-algorithm-explanation-and-c-implementation-5efa891e486f
+    // http://jmecom.github.io/blog/2015/diamond-square/
+    void DiamondSquare()
     {
-        HashSet<Square> squares; // test squares
-        squares = new HashSet<Square>();
+        int squareSize = m_res - 1; // Should always be an exponent of 2
+        int reduction = 1;
 
-        // Find the resolution (= 2 ^ mResFactor + 1) and create a grid of resolution * resolution)
-        // Which is (resolution - 1) * (resolution - 1) number of squares, hence 6 * (resolution - 1) * (resolution - 1) triangles
-        int resolution = (int) Mathf.Pow(2, mResolutionFactor) + 1;
-        Square.ms_res = resolution;
+        // Pre seed four corners of A with a value
+        int topLefIdx = 0;
+        int topRigIdx = m_res - 1;
+        int botRigIdx = m_res * m_res - 1;
+        int botLefIdx = botRigIdx - m_res + 1;
 
-int size = resolution * resolution;
-        int numIndices = 6 * (resolution - 1) * (resolution - 1);
-        vertices = new Vector3[size];
-        triangles = new int[numIndices];
+        vertices[topLefIdx] = new Vector3(0, 0, 1);
+        vertices[topRigIdx] = new Vector3(1, 0, 1);
+        vertices[botRigIdx] = new Vector3(1, 0, 0);
+        vertices[botLefIdx] = new Vector3(0, 0, 0);
 
-        // Default corners
-        int topLeftIdx = 0;
-        int topRightIdx = resolution - 1;
-        int botRightIdx = size - 1;
-        int botLeftIdx = resolution * (resolution - 1);
-        vertices[topLeftIdx] = new Vector3(0, 0, 1); // top left`
-        vertices[topRightIdx] = new Vector3(1, 0, 1); // top right
-        vertices[botRightIdx] = new Vector3(1, 0, 0); // bot right
-        vertices[botLeftIdx] = new Vector3(0, 0, 0); // bot left
+        Vector3 normalOrginal = Global.GetNormal(vertices[topLefIdx], vertices[topRigIdx], vertices[botRigIdx]);
 
-        Square sMain = new Square(topLeftIdx, topRightIdx, botRightIdx, botLeftIdx, 0, squares);
-        sMain.Subdivide(vertices, squares, Algorithm.MidpointDisplacement);
+        //vertices[topLefIdx] = Global.GetJittered(vertices[topLefIdx], normalOrginal, m_heightRange, reduction);
+        //vertices[topRigIdx] = Global.GetJittered(vertices[topRigIdx], normalOrginal, m_heightRange, reduction);
+        //vertices[botRigIdx] = Global.GetJittered(vertices[botRigIdx], normalOrginal, m_heightRange, reduction);
+        //vertices[botLefIdx] = Global.GetJittered(vertices[botLefIdx], normalOrginal, m_heightRange, reduction);
 
-        int startLoc = 0;
-        foreach (Square s in squares) s.AddIndices(ref startLoc, triangles);
+        // square steps
+        while (squareSize > 1)
+        {
+            for (int z = 0; z < m_res - 1; z += squareSize)
+            {
+                for (int x = 0; x < m_res - 1; x += squareSize)
+                {
+                    SquareStep(x, z, squareSize, reduction);
+                }
+            }
+
+            int halfSquareSize = squareSize / 2;
+            for (int i = halfSquareSize; i < m_res * m_res - 1; i += squareSize)
+            {
+                    DiamondStep(i, squareSize, reduction);
+            }
+
+            squareSize /= 2;
+            reduction++;
+        }
+
+        AddIndicies();
     }
 
-    void CreateMeshTriangles()
+    void AddIndicies()
     {
-        //// Test points
-        //vertexList.Add(new Vector3(-1, 0, 0));
-        //vertexList.Add(new Vector3(0, 0, 1));
-        //vertexList.Add(new Vector3(1, 0, 0));
-
-        //Triangle t0 = new Triangle(0, 1, 2, vertexList, 0);
-        //t0.AddTriangleVertexIndices(triangleIdxList, triangles);
-
-        //Set<Triangle> triangles = t0.Subdivide(vertexList);
-        //foreach (Triangle subTriangle in problem.Questions)
-        //{
-        //    for (int i = 0; i < triangles.Count; i++)
-        //{
-        //    triangles[i].AddTriangleVertexIndices(triangleIdxList, triangles);
-        //    Set<Triangle> subSubTriangles = triangles[i].Subdivide(vertexList);
-        //    for (int j = 0; j < subSubTriangles.Count; j++)
-        //    {
-        //        subSubTriangles[j].AddTriangleVertexIndices(triangleIdxList, triangles);
-        //    }
-        //}
-
-        //TransferVerticesFromListToArray();
-        //TransferIndicesFromListToArray();
+        // Iterate through the top left corner of all triangles and add their indices
+        int count = 0;
+        triangles = new int[6 * (m_res - 1) * (m_res - 1)]; // 6 indices per square because 3 indices per trianglew
+        for (int z = 0; z < m_res - 1; z++)
+        {
+            for (int x = 0; x < m_res - 1; x++)
+            {
+                int topLef = z * m_res + x;
+                int topRig = topLef + 1;
+                int botLef = (z + 1) * m_res + x;
+                int botRig = botLef + 1;
+                triangles[count++] = topLef;
+                triangles[count++] = topRig;
+                triangles[count++] = botRig;
+                triangles[count++] = topLef;
+                triangles[count++] = botRig;
+                triangles[count++] = botLef;
+            }
+        }
     }
 
-    void TransferVerticesFromListToArray()
+    // (x, z) is the coordinate of the top lef corner of tthe square
+    // Find the center,set its height as the average of the four corners plus some random value
+    void SquareStep(int x, int z, int sideLength, float reduction)
     {
-        //vertexArr = new Vector3[vertexList.Count];
-        //for (int i = 0; i < vertexList.Count; i++)
-        //{
-        //    vertexArr[i] = vertexList[i];
-        //}
+        int topLefIdx = z * sideLength + x;
+        int topRigIdx = topLefIdx + sideLength;
+        int botRigIdx = topRigIdx + sideLength * m_res;
+        int botLefIdx = botRigIdx - sideLength;
+
+        Vector3 normal = Global.GetNormal(vertices[topLefIdx], vertices[topRigIdx], vertices[botRigIdx]);
+        int centerIdx = Global.Average4Int(topLefIdx, topRigIdx, botRigIdx, botLefIdx);
+        vertices[centerIdx] = Global.Average4Vector(vertices[topLefIdx], vertices[topRigIdx],
+            vertices[botRigIdx], vertices[botLefIdx]);
+        Debug.Log("centerIdx: " + centerIdx + "; " + vertices[centerIdx]);
+        // vertices[centerIdx] = Global.GetJittered(vertices[centerIdx], normal, m_heightRange, reduction);
     }
 
-    void TransferIndicesFromListToArray()
+    // (x, z) is the coordinate ofsome point that needs to be averaged by the four "diamond points" around it
+    // Find it, set its height by the average plus some random value
+    void DiamondStep(int currentIdx, int sideLength, float reduction)
     {
-        //vertexIdxArr = new int[vertexIdxList.Count];
-        //for (int i = 0; i < vertexIdxList.Count; i++)
-        //{
-        //    vertexIdxArr[i] = vertexIdxList[i];
-        //}
+        int halfSideLength = sideLength / 2;
+
+        int topIdx = currentIdx - halfSideLength * m_res;
+        int rigIdx = currentIdx + halfSideLength;
+        int botIdx = currentIdx + halfSideLength * m_res;
+        int lefIdx = currentIdx - halfSideLength;
+        Vector3 normal = new Vector3(0, 1, 0);
+
+        //int onTopBorder = topIdx - m_res;
+        //int onBotBorder = botIdx / m_res - (m_res - 1);
+        //int onLefBorder = lefIdx % m_res;
+        //int onRigBorder = rigIdx % m_res - (m_res - 1);
+
+        // Check for edge cases where the current point is on the edge of the original sqaure
+        if (topIdx < 0)
+        {
+            Debug.Log("topIdx: " + topIdx + "; ");
+            Debug.Log("botIdx: " + botIdx + "; " + vertices[botIdx]);
+            Debug.Log("rigIdx: " + rigIdx + "; " + vertices[rigIdx]);
+            Debug.Log("lefIdx: " + lefIdx + "; " + vertices[lefIdx]);
+            normal = Global.GetNormal(vertices[rigIdx], vertices[botIdx], vertices[lefIdx]);
+            vertices[currentIdx] = new Vector3((vertices[lefIdx].x + vertices[rigIdx].x) / 2f, 0, (vertices[lefIdx].z + vertices[rigIdx].z) / 2f); // Global.Average3Vector(vertices[rigIdx], vertices[botIdx], vertices[lefIdx]);
+        }
+        else if (botIdx > m_res * m_res - 1)
+        {
+            Debug.Log("topIdx: " + topIdx + "; " + vertices[topIdx]);
+            Debug.Log("botIdx: " + botIdx + "; " );
+            Debug.Log("rigIdx: " + rigIdx + "; " + vertices[rigIdx]);
+            Debug.Log("lefIdx: " + lefIdx + "; " + vertices[lefIdx]);
+            normal = Global.GetNormal(vertices[topIdx], vertices[rigIdx], vertices[lefIdx]);
+            vertices[currentIdx] = new Vector3((vertices[lefIdx].x + vertices[rigIdx].x) / 2f, 0, (vertices[lefIdx].z + vertices[rigIdx].z) / 2f); ;// Global.Average3Vector(vertices[topIdx], vertices[rigIdx], vertices[lefIdx]);
+        }
+        else if (rigIdx % m_res == m_res - 1)
+        {
+            Debug.Log("topIdx: " + topIdx + "; " + vertices[topIdx]);
+            Debug.Log("botIdx: " + botIdx + "; " + vertices[botIdx]);
+            Debug.Log("rigIdx: " + rigIdx + "; ");
+            Debug.Log("lefIdx: " + lefIdx + "; " + vertices[lefIdx]);
+            normal = Global.GetNormal(vertices[botIdx], vertices[lefIdx], vertices[topIdx]);
+            vertices[currentIdx] = new Vector3((vertices[topIdx].x + vertices[botIdx].x) / 2f, 0, (vertices[topIdx].z + vertices[botIdx].z) / 2f); // Global.Average3Vector(vertices[botIdx], vertices[lefIdx], vertices[topIdx]);
+        }
+        else if (lefIdx % m_res == 0)
+        {
+            Debug.Log("topIdx: " + topIdx + "; " + vertices[topIdx]);
+            Debug.Log("botIdx: " + botIdx + "; " + vertices[botIdx]);
+            Debug.Log("rigIdx: " + rigIdx + "; " + vertices[rigIdx]);
+            Debug.Log("lefIdx: " + lefIdx + "; ");
+            normal = Global.GetNormal(vertices[topIdx], vertices[rigIdx], vertices[botIdx]);
+            vertices[currentIdx] = new Vector3((vertices[topIdx].x + vertices[botIdx].x) / 2f, 0, (vertices[topIdx].z + vertices[botIdx].z) / 2f);//  Global.Average3Vector(vertices[topIdx], vertices[rigIdx], vertices[botIdx]);
+        }
+        else
+        {
+            Debug.Log("topIdx: " + topIdx + "; " + vertices[topIdx]);
+            Debug.Log("botIdx: " + botIdx + "; " + vertices[botIdx]);
+            Debug.Log("rigIdx: " + rigIdx + "; " + vertices[rigIdx]);
+            Debug.Log("lefIdx: " + lefIdx + "; " + vertices[lefIdx]);
+            normal = Global.GetNormal(vertices[topIdx], vertices[rigIdx], vertices[botIdx]);
+           // normal = Global.GetNormal(vertices[topIdx], vertices[rigIdx], vertices[botIdx]);
+            vertices[currentIdx] = new Vector3((vertices[topIdx].x + vertices[botIdx].x) / 2f, 0, (vertices[topIdx].z + vertices[botIdx].z) / 2f);//Global.Average4Vector(vertices[topIdx], vertices[rigIdx],
+                                                                                                                                                  // vertices[botIdx], vertices[lefIdx]);
+        }
+
+        Debug.Log("currentIdx: " + currentIdx + "; " + vertices[currentIdx]);
+
+        //vertices[currentIdx] = Global.GetJittered(vertices[currentIdx], normal, m_heightRange, reduction);
     }
 
 

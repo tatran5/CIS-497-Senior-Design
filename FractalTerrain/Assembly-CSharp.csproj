@@ -64,6 +64,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Assets\Scripts\FractalTerrain.cs" />
+    <Compile Include="Assets\Scripts\Global.cs" />
     <Compile Include="Assets\Scripts\Square.cs" />
     <Reference Include="Unity.Timeline.Editor">
       <HintPath>D:/Academics/CIS-497-Senior-Design/FractalTerrain/Library/ScriptAssemblies/Unity.Timeline.Editor.dll</HintPath>
