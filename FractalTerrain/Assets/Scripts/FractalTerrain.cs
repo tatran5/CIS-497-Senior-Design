@@ -29,7 +29,7 @@ public class FractalTerrain : MonoBehaviour
             Debug.Log("m_resolutionFactor needs to be at least 0. Default one square instead");
             m_res = 0;
         }
-        
+
         // Find the resolution (= 2 ^ m_resFactor + 1) and create a grid of resolution * resolution)
         // Which is (resolution - 1) * (resolution - 1) number of squares, hence 6 * (resolution - 1) * (resolution - 1) triangles
         m_res = (int)Mathf.Pow(2, m_resolutionFactor) + 1;
@@ -79,10 +79,10 @@ public class FractalTerrain : MonoBehaviour
         vertices[botLefIdx] = new Vector3(0, 0, 0);
         Vector3 normalOriginal = Global.GetNormal(vertices[topLefIdx], vertices[topRigIdx], vertices[botRigIdx]);
 
-        vertices[topLefIdx] = Global.GetJittered(vertices[topLefIdx], m_worldUp, m_heightRange, reduction);
-        vertices[topRigIdx] = Global.GetJittered(vertices[topRigIdx], m_worldUp, m_heightRange, reduction);
-        vertices[botRigIdx] = Global.GetJittered(vertices[botRigIdx], m_worldUp, m_heightRange, reduction);
-        vertices[botLefIdx] = Global.GetJittered(vertices[botLefIdx], m_worldUp, m_heightRange, reduction);
+        //vertices[topLefIdx] = Global.GetJittered(vertices[topLefIdx], m_worldUp, m_heightRange, reduction);
+        //vertices[topRigIdx] = Global.GetJittered(vertices[topRigIdx], m_worldUp, m_heightRange, reduction);
+        //vertices[botRigIdx] = Global.GetJittered(vertices[botRigIdx], m_worldUp, m_heightRange, reduction);
+        //vertices[botLefIdx] = Global.GetJittered(vertices[botLefIdx], m_worldUp, m_heightRange, reduction);
 
         // square steps
         while (squareSize > 1)
@@ -91,16 +91,14 @@ public class FractalTerrain : MonoBehaviour
             {
                 for (int x = 0; x < m_res - 1; x += squareSize)
                 {
-                    // Debug.Log("z: " + z + "; x: " + x);
                     SquareStep(z, x, squareSize, reduction);
                 }
             }
 
-            int halfSquareSize = squareSize / 2;
-            for (int z = 0; z < m_res; z += halfSquareSize)
+            //int halfSquareSize = squareSize / 2;
+            for (int z = 0; z < m_res - 1; z += squareSize)
             {
-                int startX = (z / halfSquareSize) % 2 == 0 ? halfSquareSize : 0;
-                for (int x = startX; x < m_res; x += squareSize)
+                for (int x = 0; x < m_res - 1; x += squareSize)
                 {
                     DiamondStep(z, x, squareSize, reduction);
                 }
@@ -137,86 +135,87 @@ public class FractalTerrain : MonoBehaviour
         }
     }
 
-    // (x, z) is the coordinate of the top lef corner of tthe square
-    // Find the center,set its height as the average of the four corners plus some random value
+    /* (x, z) is the coordinate of the top lef corner of the square
+       Find the center,set its height as the average of the four corners plus some random value*/
     void SquareStep(int z, int x, int sideLength, float reduction)
     {
         int topLefIdx = z * m_res + x;
         int topRigIdx = topLefIdx + sideLength;
         int botRigIdx = topRigIdx + sideLength * m_res;
         int botLefIdx = botRigIdx - sideLength;
-        //Debug.Log("topLefIdx: " + topLefIdx + "; ");
-        //Debug.Log("topRigIdx: " + topRigIdx + "; ");
-        //Debug.Log("botRigIdx: " + botRigIdx + "; ");
-        //Debug.Log("botLefIdx: " + botLefIdx + "; ");
 
         Vector3 normal = Global.GetNormal(vertices[topLefIdx], vertices[topRigIdx], vertices[botRigIdx]);
         int centerIdx = Global.Average4Int(topLefIdx, topRigIdx, botRigIdx, botLefIdx);
-        vertices[centerIdx] = Global.Average4Vector(vertices[topLefIdx], vertices[topRigIdx],
-            vertices[botRigIdx], vertices[botLefIdx]);
-        // Debug.Log("centerIdx: " + centerIdx + "; " + vertices[centerIdx]);
-        vertices[centerIdx] = Global.GetJittered(vertices[centerIdx], m_worldUp, m_heightRange, reduction);
+
+        vertices[centerIdx] = Global.Average4Vector(vertices[topLefIdx], vertices[topRigIdx], vertices[botRigIdx], vertices[botLefIdx]);
+        vertices[centerIdx] = Global.GetJittered(vertices[centerIdx], normal, m_heightRange, reduction);
     }
 
-    // (x, z) is the coordinate ofsome point that needs to be averaged by the four "diamond points" around it
-    // Find it, set its height by the average plus some random value
+    /* (x, z) is the coordinate of the top left corner of the square whose mid point on edges need
+      * to be modified. 
+      * However, to do this efficiently, 
+      *     - we only modify the midpoint on the right edge if the square is all the way to the right of the grid, 
+      *     - we only modify the midpoint on the bottom edge if the square is all the way at the bottom of the grid */
     void DiamondStep(int z, int x, int sideLength, float reduction)
     {
-        int currentIdx = z * m_res + x;
         int halfSideLength = sideLength / 2;
 
-        int topIdx = currentIdx - halfSideLength * m_res;
-        int rigIdx = currentIdx + halfSideLength;
-        int botIdx = currentIdx + halfSideLength * m_res;
-        int lefIdx = currentIdx - halfSideLength;
-        Vector3 normal = new Vector3(0, 1, 0);
+        int topLefIdx = z * m_res + x;
+        int topRigIdx = topLefIdx + sideLength;
+        int botRigIdx = topRigIdx + sideLength * m_res;
+        int botLefIdx = topLefIdx + sideLength * m_res;
+        int centerIdx = Global.Average4Int(topLefIdx, topRigIdx, botRigIdx, botLefIdx);
 
-        //int onTopBorder = topIdx - m_res;
-        //int onBotBorder = botIdx / m_res - (m_res - 1);
-        //int onLefBorder = lefIdx % m_res;
-        //int onRigBorder = rigIdx % m_res - (m_res - 1);
-        //Debug.Log("topIdx: " + topIdx + "; ");
-        //Debug.Log("rigIdx: " + rigIdx + "; ");
-        //Debug.Log("botIdx: " + botIdx + "; ");
+        // Check for whether this square is all the way to the top, right, bottom or left of the grid
+        bool isTopSquare = topLefIdx - m_res < 0;
+        bool isRigSquare = botRigIdx % m_res == m_res - 1;
+        bool isBotSquare = botRigIdx + m_res >= m_res * m_res;
+        bool isLefSquare = botLefIdx % m_res == 0;
 
-        //Debug.Log("lefIdx: " + lefIdx + "; ");
-        // Check for edge cases where the current point is on the edge of the original sqaure
-        if (topIdx < 0)
+        Vector3 normal = Global.GetNormal(vertices[topLefIdx], vertices[topRigIdx], vertices[botRigIdx]);
+
+        /* Handle top edge: 
+         * - If the square is at the top of the grid, the midpoint of the top edge is the average of the current's center and the points on the edge
+         * - Otherwise, the midpoint of the top edge is the average of the current's center, the points on the edge and the center of the square above it
+         * Similarly, handle for left edge. */
+        int centerIdxTopSquare = centerIdx - m_res;
+        int midTopIdx = topLefIdx + halfSideLength;
+        Debug.Log("midTopIdx " + midTopIdx);
+        Debug.Log("isTopSqua " + isTopSquare);
+        HandleMidpoint(isTopSquare, centerIdxTopSquare, midTopIdx, centerIdx, topLefIdx, topRigIdx, normal, reduction);
+
+        int centerIdxLefSquare = centerIdx - sideLength;
+        int midLefIdx = centerIdx - halfSideLength;
+        Debug.Log("midLefIdx " + midLefIdx);
+        Debug.Log("isLefSqua " + isLefSquare);
+        HandleMidpoint(isLefSquare, centerIdxLefSquare, midLefIdx, centerIdx, topLefIdx, botLefIdx, normal, reduction);
+
+        // Handle the right and bottom midpoints if the square is all the way to the right or at the bottom of the grid
+        if (isRigSquare)
         {
-            normal = Global.GetNormal(vertices[rigIdx], vertices[botIdx], vertices[lefIdx]);
-            vertices[currentIdx] = new Vector3((vertices[lefIdx].x + vertices[rigIdx].x) / 2f, 0, (vertices[lefIdx].z + vertices[rigIdx].z) / 2f); //
-            // vertices[currentIdx] = Global.Average3Vector(vertices[rigIdx], vertices[botIdx], vertices[lefIdx]);
-        }
-        else if (botIdx > m_res * m_res - 1)
-        {
-            normal = Global.GetNormal(vertices[topIdx], vertices[rigIdx], vertices[lefIdx]);
-            vertices[currentIdx] = new Vector3((vertices[lefIdx].x + vertices[rigIdx].x) / 2f, 0, (vertices[lefIdx].z + vertices[rigIdx].z) / 2f); ;// Global.Average3Vector(vertices[topIdx], vertices[rigIdx], vertices[lefIdx]);
-        }
-        else if (rigIdx % m_res == m_res - 1)
-        {
-            //Debug.Log("topIdx: " + topIdx + "; " + vertices[topIdx]);
-            //Debug.Log("botIdx: " + botIdx + "; " + vertices[botIdx]);
-            //Debug.Log("rigIdx: " + rigIdx + "; ");
-            //Debug.Log("lefIdx: " + lefIdx + "; " + vertices[lefIdx]);
-            normal = Global.GetNormal(vertices[botIdx], vertices[lefIdx], vertices[topIdx]);
-            vertices[currentIdx] = new Vector3((vertices[topIdx].x + vertices[botIdx].x) / 2f, 0, (vertices[topIdx].z + vertices[botIdx].z) / 2f); // Global.Average3Vector(vertices[botIdx], vertices[lefIdx], vertices[topIdx]);
-        }
-        else if (lefIdx % m_res == 0)
-        {
-            normal = Global.GetNormal(vertices[topIdx], vertices[rigIdx], vertices[botIdx]);
-            vertices[currentIdx] = new Vector3((vertices[topIdx].x + vertices[botIdx].x) / 2f, 0, (vertices[topIdx].z + vertices[botIdx].z) / 2f);//  Global.Average3Vector(vertices[topIdx], vertices[rigIdx], vertices[botIdx]);
-        }
-        else
-        {
-            normal = Global.GetNormal(vertices[topIdx], vertices[rigIdx], vertices[botIdx]);
-            vertices[currentIdx] = new Vector3((vertices[topIdx].x + vertices[botIdx].x) / 2f, 0, (vertices[topIdx].z + vertices[botIdx].z) / 2f);//Global.Average4Vector(vertices[topIdx], vertices[rigIdx],
-                                                                                                                                                  // vertices[botIdx], vertices[lefIdx]);
+            Debug.Log("isRigSquare");
+            int midRigIdx = centerIdx + halfSideLength;
+            HandleMidpoint(true, -1, midRigIdx, centerIdx + halfSideLength, topRigIdx, botRigIdx, normal, reduction);
         }
 
-        // Debug.Log("currentIdx: " + currentIdx + "; " + vertices[currentIdx]);
-        vertices[currentIdx] = Global.GetJittered(vertices[currentIdx], m_worldUp, m_heightRange, reduction);
+        if (isBotSquare)
+        {
+            Debug.Log("isBotSquare");
+            int midBotIdx = botLefIdx + halfSideLength;
+            HandleMidpoint(true, -1, midBotIdx, centerIdx, botLefIdx, botRigIdx, normal, reduction);
+        }
     }
 
+    void HandleMidpoint(bool isEdgeCase, int adjacentSquareCenterIdx, int midpointIdx, 
+        int centerIdx, int endpoint0Idx, int endpoint1Idx, Vector3 normal, float reduction)
+    {
+        vertices[midpointIdx] = Global.Average2Vector(vertices[endpoint0Idx], vertices[endpoint1Idx]);
+
+        //vertices[midpointIdx] = isEdgeCase ?
+        //    Global.Average3Vector(vertices[endpoint0Idx], vertices[endpoint1Idx], vertices[centerIdx]) :
+        //    Global.Average4Vector(vertices[endpoint0Idx], vertices[endpoint1Idx], vertices[centerIdx], vertices[adjacentSquareCenterIdx]);
+        // vertices[midpointIdx] = Global.GetJittered(vertices[midpointIdx], normal, m_heightRange, reduction);
+    }
 
     void UpdateMesh()
     {

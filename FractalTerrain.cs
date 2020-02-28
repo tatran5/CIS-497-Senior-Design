@@ -47,53 +47,6 @@ public class FractalTerrain : MonoBehaviour
 
         foreach (Square s in squares) s.AddIndices(vertexIdxList);
     } 
-
-    void CreateMeshTriangles()
-    {
-        //// Test points
-        //vertexList.Add(new Vector3(-1, 0, 0));
-        //vertexList.Add(new Vector3(0, 0, 1));
-        //vertexList.Add(new Vector3(1, 0, 0));
-
-        //Triangle t0 = new Triangle(0, 1, 2, vertexList, 0);
-        //t0.AddTriangleVertexIndices(triangleIdxList, triangles);
-
-        //Set<Triangle> triangles = t0.Subdivide(vertexList);
-        //foreach (Triangle subTriangle in problem.Questions)
-        //{
-        //    for (int i = 0; i < triangles.Count; i++)
-        //{
-        //    triangles[i].AddTriangleVertexIndices(triangleIdxList, triangles);
-        //    Set<Triangle> subSubTriangles = triangles[i].Subdivide(vertexList);
-        //    for (int j = 0; j < subSubTriangles.Count; j++)
-        //    {
-        //        subSubTriangles[j].AddTriangleVertexIndices(triangleIdxList, triangles);
-        //    }
-        //}
-
-        TransferVerticesFromListToArray();
-        TransferIndicesFromListToArray();
-    }
-
-    void TransferVerticesFromListToArray()
-    {
-        vertexArr = new Vector3[vertexList.Count];
-        for (int i = 0; i < vertexList.Count; i++)
-        {
-            vertexArr[i] = (Vector3) vertexList[i];
-        }
-    }
-
-    void TransferIndicesFromListToArray()
-    { 
-        vertexIdxArr = new int[vertexIdxList.Count];
-        for (int i = 0; i < vertexIdxList.Count; i++)
-        {
-            vertexIdxArr[i] = (int)vertexIdxArr[i];
-        }
-    }
-    
-
     void UpdateMesh()
     {
         mesh.Clear();

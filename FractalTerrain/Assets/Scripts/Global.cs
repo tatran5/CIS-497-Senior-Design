@@ -32,6 +32,11 @@ public class Global
         return (x + y + z + w) / 4f;
     }
 
+    public static Vector3 Average2Vector(Vector3 x, Vector3 y)
+    {
+        return (x + y) / 2f;
+    }
+
     public static Vector3 Average3Vector(Vector3 x, Vector3 y, Vector3 z)
     {
         return (x + y + z) / 3f;
